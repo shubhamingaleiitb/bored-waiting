@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reaction Time | Bored Waiting?</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .reaction-box {
+            width: 500px;
+            max-width: 90vw;
+            height: 350px;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.15s;
+            user-select: none;
+            -webkit-user-select: none;
+            gap: 12px;
+        }
+        .state-waiting {
+            background: #e74c3c;
+        }
+        .state-ready {
+            background: #2ecc71;
+        }
+        .state-idle {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .state-early {
+            background: #e67e22;
+        }
+        .reaction-box h2 {
+            font-size: 1.6rem;
+            color: #fff;
+            font-weight: 700;
+        }
+        .reaction-box p {
+            color: rgba(255,255,255,0.8);
+            font-size: 1rem;
+        }
+        .attempts {
+            display: flex;
+            gap: 10px;
+            margin-top: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .attempt-chip {
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            background: rgba(255,255,255,0.06);
+            color: #888;
+        }
+        .attempt-chip.done {
+            background: rgba(78, 205, 196, 0.15);
+            color: #4ECDC4;
+        }
+        .attempt-chip.early {
+            background: rgba(231, 76, 60, 0.15);
+            color: #e74c3c;
+        }
+        .avg-display {
+            margin-top: 16px;
+            font-size: 0.9rem;
+            color: #888;
+        }
+        .final-container {
+            display: none;
+            text-align: center;
+        }
+        .final-container.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-page">
+        <div class="game-header">
+            <a href="../index.html" class="back-link">← Back</a>
+            <span class="game-title">⚡ Reaction Time</span>
+            <span></span>
+        </div>
+        <div class="game-content">
+            <div id="gameArea">
+                <p class="instructions">Test your reflexes! Click/tap the box as soon as it turns <strong style="color: #2ecc71;">GREEN</strong>.</p>
+                <div class="reaction-box state-idle" id="reactionBox">
+                    <h2>Click to Start</h2>
+                    <p>5 rounds</p>
+                </div>
+                <div class="attempts" id="attempts">
+                    <span class="attempt-chip" id="a1">Round 1</span>
+                    <span class="attempt-chip" id="a2">Round 2</span>
+                    <span class="attempt-chip" id="a3">Round 3</span>
+                    <span class="attempt-chip" id="a4">Round 4</span>
+                    <span class="attempt-chip" id="a5">Round 5</span>
+                </div>
+                <p class="avg-display" id="avgDisplay"></p>
+            </div>
+
+            <div class="final-container" id="finalContainer">
+                <p class="score-label">Average Reaction Time</p>
+                <div class="score-display" id="finalTime" style="background: linear-gradient(135deg, #A8E6CF, #4ECDC4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">0ms</div>
+                <p class="rating-text" id="finalRating"></p>
+                <div style="margin-top: 30px; display: flex; gap: 12px; justify-content: center;">
+                    <button class="btn btn-primary" onclick="restart()" style="background: linear-gradient(135deg, #A8E6CF, #2ecc71);">Try Again</button>
+                    <a href="../index.html" class="btn btn-secondary">More Games</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const box = document.getElementById('reactionBox');
+        let state = 'idle'; // idle, waiting, ready
+        let timeout;
+        let startTime;
+        let round = 0;
+        let times = [];
+
+        box.addEventListener('click', handleClick);
+
+        function handleClick() {
+            if (state === 'idle') {
+                startRound();
+            } else if (state === 'waiting') {
+                // Too early!
+                clearTimeout(timeout);
+                state = 'idle';
+                box.className = 'reaction-box state-early';
+                box.innerHTML = '<h2>Too Early! 🙈</h2><p>Click to try again</p>';
+                const chip = document.getElementById('a' + (round));
+                if (chip) {
+                    chip.textContent = 'Early!';
+                    chip.classList.add('early');
+                }
+                round--;
+            } else if (state === 'ready') {
+                const elapsed = Date.now() - startTime;
+                times.push(elapsed);
+                const chip = document.getElementById('a' + round);
+                if (chip) {
+                    chip.textContent = elapsed + 'ms';
+                    chip.classList.add('done');
+                }
+
+                const avg = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+                document.getElementById('avgDisplay').textContent = `Running average: ${avg}ms`;
+
+                if (round >= 5) {
+                    setTimeout(showFinal, 600);
+                    state = 'idle';
+                    box.className = 'reaction-box state-idle';
+                    box.innerHTML = `<h2>${elapsed}ms</h2><p>Done!</p>`;
+                    return;
+                }
+
+                state = 'idle';
+                box.className = 'reaction-box state-idle';
+                box.innerHTML = `<h2>${elapsed}ms</h2><p>Click for next round</p>`;
+            }
+        }
+
+        function startRound() {
+            round++;
+            state = 'waiting';
+            box.className = 'reaction-box state-waiting';
+            box.innerHTML = '<h2>Wait for green...</h2><p>Don\'t click yet!</p>';
+
+            const delay = 1000 + Math.random() * 3000;
+            timeout = setTimeout(() => {
+                state = 'ready';
+                startTime = Date.now();
+                box.className = 'reaction-box state-ready';
+                box.innerHTML = '<h2>CLICK NOW!</h2><p>⚡</p>';
+            }, delay);
+        }
+
+        function showFinal() {
+            document.getElementById('gameArea').style.display = 'none';
+            const container = document.getElementById('finalContainer');
+            container.classList.add('show');
+
+            const avg = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+            document.getElementById('finalTime').textContent = avg + 'ms';
+
+            let rating;
+            if (avg < 200) rating = '⚡ Lightning fast! Are you even human?';
+            else if (avg < 250) rating = '🔥 Blazing quick reflexes!';
+            else if (avg < 300) rating = '👍 Above average! Nice reflexes!';
+            else if (avg < 400) rating = '🙂 Pretty normal. You\'re human after all.';
+            else rating = '🐌 Maybe lay off the coffee... or drink more?';
+            document.getElementById('finalRating').textContent = rating;
+        }
+
+        function restart() {
+            round = 0;
+            times = [];
+            state = 'idle';
+            document.getElementById('gameArea').style.display = 'block';
+            document.getElementById('finalContainer').classList.remove('show');
+            document.getElementById('avgDisplay').textContent = '';
+            box.className = 'reaction-box state-idle';
+            box.innerHTML = '<h2>Click to Start</h2><p>5 rounds</p>';
+            for (let i = 1; i <= 5; i++) {
+                const chip = document.getElementById('a' + i);
+                chip.textContent = 'Round ' + i;
+                chip.className = 'attempt-chip';
+            }
+        }
+    </script>
+</body>
+</html>

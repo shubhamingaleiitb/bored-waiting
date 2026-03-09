@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Archery | Bored Waiting?</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .archery-area {
+            position: relative;
+            width: 500px;
+            max-width: 90vw;
+        }
+        canvas {
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            cursor: pointer;
+            max-width: 100%;
+        }
+        .stats-bar {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            color: #888;
+        }
+        .stats-bar span {
+            background: rgba(255,255,255,0.05);
+            padding: 6px 14px;
+            border-radius: 8px;
+        }
+        .wind-indicator {
+            color: #4ECDC4 !important;
+        }
+        .power-bar-container {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 4px;
+            margin-top: 16px;
+            overflow: hidden;
+        }
+        .power-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.05s;
+            background: linear-gradient(90deg, #4ECDC4, #FFE66D, #FF6B6B);
+        }
+        .shot-result {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2rem;
+            font-weight: 800;
+            opacity: 0;
+            transition: all 0.5s ease;
+            pointer-events: none;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        .shot-result.show {
+            opacity: 1;
+            transform: translate(-50%, -70%);
+        }
+        .round-info {
+            text-align: center;
+            margin-top: 12px;
+            font-size: 0.85rem;
+            color: #666;
+        }
+        .final-results {
+            display: none;
+            text-align: center;
+        }
+        .final-results.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-page">
+        <div class="game-header">
+            <a href="../index.html" class="back-link">← Back</a>
+            <span class="game-title">🏹 Archery</span>
+            <span></span>
+        </div>
+        <div class="game-content">
+            <div class="archery-area" id="gameArea">
+                <div class="stats-bar">
+                    <span>🏹 Arrows: <strong id="arrowsLeft">5</strong></span>
+                    <span class="wind-indicator" id="windDisplay">💨 Wind: None</span>
+                    <span>🎯 Score: <strong id="totalScore">0</strong></span>
+                </div>
+                <canvas id="canvas" width="500" height="500"></canvas>
+                <div class="power-bar-container">
+                    <div class="power-bar-fill" id="powerBar" style="width: 0%"></div>
+                </div>
+                <div class="shot-result" id="shotResult"></div>
+                <p class="round-info" id="roundInfo">Click and hold to charge, release to shoot!</p>
+            </div>
+
+            <div class="final-results" id="finalResults">
+                <p class="score-label">Final Score</p>
+                <div class="score-display" style="background: linear-gradient(135deg, #FFE66D, #FF6B6B); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;" id="finalScore">0</div>
+                <p class="rating-text" id="finalRating"></p>
+                <div style="margin-top: 30px; display: flex; gap: 12px; justify-content: center;">
+                    <button class="btn btn-primary" onclick="restartGame()" style="background: linear-gradient(135deg, #FFE66D, #ee9a24);">Play Again</button>
+                    <a href="../index.html" class="btn btn-secondary">More Games</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width, H = canvas.height;
+        const centerX = W / 2, centerY = H / 2;
+
+        let arrows = 5;
+        let totalScore = 0;
+        let charging = false;
+        let power = 0;
+        let powerDir = 1;
+        let wind = 0;
+        let arrowHits = [];
+        let animFrame;
+        let canShoot = true;
+
+        function generateWind() {
+            wind = (Math.random() - 0.5) * 60;
+            const dir = wind > 0 ? '→' : '←';
+            const strength = Math.abs(wind) < 10 ? 'Light' : Math.abs(wind) < 25 ? 'Medium' : 'Strong';
+            document.getElementById('windDisplay').textContent = `💨 Wind: ${strength} ${dir}`;
+        }
+
+        function drawTarget() {
+            ctx.clearRect(0, 0, W, H);
+
+            const rings = [
+                { r: 150, color: '#fff', border: '#ddd' },
+                { r: 120, color: '#333', border: '#444' },
+                { r: 90, color: '#4ECDC4', border: '#3db8b0' },
+                { r: 60, color: '#FF6B6B', border: '#e55a5a' },
+                { r: 30, color: '#FFE66D', border: '#e6cf5a' }
+            ];
+
+            rings.forEach(ring => {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, ring.r, 0, Math.PI * 2);
+                ctx.fillStyle = ring.color;
+                ctx.fill();
+                ctx.strokeStyle = ring.border;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            // Bullseye
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#FF6B6B';
+            ctx.fill();
+
+            // Cross hairs
+            ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY - 155);
+            ctx.lineTo(centerX, centerY + 155);
+            ctx.moveTo(centerX - 155, centerY);
+            ctx.lineTo(centerX + 155, centerY);
+            ctx.stroke();
+
+            // Draw previous arrow hits
+            arrowHits.forEach(hit => {
+                ctx.save();
+                ctx.translate(hit.x, hit.y);
+                // Arrow shaft
+                ctx.strokeStyle = '#8B4513';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(0, -12);
+                ctx.lineTo(0, 12);
+                ctx.stroke();
+                // Arrow tip
+                ctx.fillStyle = '#888';
+                ctx.beginPath();
+                ctx.moveTo(0, -16);
+                ctx.lineTo(-4, -10);
+                ctx.lineTo(4, -10);
+                ctx.closePath();
+                ctx.fill();
+                // Fletching
+                ctx.fillStyle = '#FF6B6B';
+                ctx.beginPath();
+                ctx.moveTo(-5, 12);
+                ctx.lineTo(0, 6);
+                ctx.lineTo(5, 12);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            });
+        }
+
+        function chargePower() {
+            if (!charging) return;
+            power += powerDir * 2;
+            if (power >= 100) powerDir = -1;
+            if (power <= 0) powerDir = 1;
+            document.getElementById('powerBar').style.width = power + '%';
+            animFrame = requestAnimationFrame(chargePower);
+        }
+
+        function shoot() {
+            if (!canShoot) return;
+            canShoot = false;
+
+            // Calculate where the arrow lands
+            // Perfect power is around 50 (middle), deviation increases with distance from 50
+            const powerDeviation = Math.abs(power - 50) / 50; // 0 = perfect, 1 = worst
+            const maxOffset = 160;
+            const baseOffset = powerDeviation * maxOffset;
+
+            // Random angle + wind effect
+            const angle = Math.random() * Math.PI * 2;
+            const jitter = (Math.random() - 0.5) * 30;
+            const hitX = centerX + Math.cos(angle) * (baseOffset + jitter) + wind;
+            const hitY = centerY + Math.sin(angle) * (baseOffset + jitter);
+
+            // Clamp to canvas
+            const clampedX = Math.max(10, Math.min(W - 10, hitX));
+            const clampedY = Math.max(10, Math.min(H - 10, hitY));
+
+            arrowHits.push({ x: clampedX, y: clampedY });
+
+            // Calculate distance from center
+            const dist = Math.sqrt((clampedX - centerX) ** 2 + (clampedY - centerY) ** 2);
+
+            let points = 0;
+            let label = '';
+            if (dist <= 8) { points = 10; label = '🎯 BULLSEYE! +10'; }
+            else if (dist <= 30) { points = 8; label = '🔥 Great! +8'; }
+            else if (dist <= 60) { points = 6; label = '👍 Good! +6'; }
+            else if (dist <= 90) { points = 4; label = 'OK +4'; }
+            else if (dist <= 120) { points = 2; label = 'Meh +2'; }
+            else if (dist <= 150) { points = 1; label = 'Barely! +1'; }
+            else { points = 0; label = '😬 Miss!'; }
+
+            totalScore += points;
+            arrows--;
+
+            document.getElementById('totalScore').textContent = totalScore;
+            document.getElementById('arrowsLeft').textContent = arrows;
+
+            // Show shot result
+            const shotResult = document.getElementById('shotResult');
+            shotResult.textContent = label;
+            shotResult.classList.add('show');
+            setTimeout(() => shotResult.classList.remove('show'), 1200);
+
+            drawTarget();
+
+            if (arrows <= 0) {
+                setTimeout(showFinalResults, 1500);
+            } else {
+                generateWind();
+                setTimeout(() => { canShoot = true; }, 800);
+            }
+        }
+
+        function showFinalResults() {
+            document.getElementById('gameArea').style.display = 'none';
+            const results = document.getElementById('finalResults');
+            results.classList.add('show');
+            document.getElementById('finalScore').textContent = totalScore + '/50';
+
+            let rating;
+            if (totalScore >= 45) rating = '🏆 Olympic Gold! Incredible!';
+            else if (totalScore >= 35) rating = '🥈 Sharpshooter! Very impressive!';
+            else if (totalScore >= 25) rating = '🎯 Solid aim! Keep practicing!';
+            else if (totalScore >= 15) rating = '🙂 Not bad for a beginner!';
+            else rating = '🌀 Maybe try darts instead?';
+            document.getElementById('finalRating').textContent = rating;
+        }
+
+        function restartGame() {
+            arrows = 5;
+            totalScore = 0;
+            power = 0;
+            arrowHits = [];
+            canShoot = true;
+            document.getElementById('totalScore').textContent = '0';
+            document.getElementById('arrowsLeft').textContent = '5';
+            document.getElementById('powerBar').style.width = '0%';
+            document.getElementById('gameArea').style.display = 'block';
+            document.getElementById('finalResults').classList.remove('show');
+            generateWind();
+            drawTarget();
+        }
+
+        // Events
+        canvas.addEventListener('mousedown', (e) => {
+            if (!canShoot || arrows <= 0) return;
+            charging = true;
+            power = 0;
+            powerDir = 1;
+            chargePower();
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (!charging) return;
+            charging = false;
+            cancelAnimationFrame(animFrame);
+            shoot();
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!canShoot || arrows <= 0) return;
+            charging = true;
+            power = 0;
+            powerDir = 1;
+            chargePower();
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (!charging) return;
+            charging = false;
+            cancelAnimationFrame(animFrame);
+            shoot();
+        });
+
+        generateWind();
+        drawTarget();
+    </script>
+</body>
+</html>
